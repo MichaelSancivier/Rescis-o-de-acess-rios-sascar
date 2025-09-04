@@ -1,8 +1,3 @@
-
----
-
-# 5) `streamlit_app.py`
-```python
 import json
 import difflib
 from io import BytesIO
@@ -43,10 +38,10 @@ def normalize_text(s: str) -> str:
         return ""
     s = str(s).strip().lower()
     mapa = {"ã":"a","â":"a","á":"a","à":"a","é":"e","ê":"e","í":"i","ó":"o","ô":"o","ú":"u","ç":"c"}
-    for k,v in mapa.items():
-        s = s.replace(k,v)
+    for k, v in mapa.items():
+        s = s.replace(k, v)
     while "  " in s:
-        s = s.replace("  "," ")
+        s = s.replace("  ", " ")
     return s
 
 def parse_date_any(x):
@@ -55,7 +50,7 @@ def parse_date_any(x):
     if isinstance(x, (pd.Timestamp, datetime)):
         return pd.to_datetime(x)
     x = str(x).strip()
-    for fmt in ("%Y-%m-%d","%d/%m/%Y","%m/%d/%Y","%d-%m-%Y"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
         try:
             return pd.to_datetime(x, format=fmt)
         except Exception:
@@ -106,25 +101,7 @@ def to_number(series: pd.Series, decimal_sep: str, thousand_sep: str) -> pd.Seri
 
 # ===================== Sidebar: upload + perfil =====================
 st.sidebar.header("Upload")
-file = st.sidebar.file_uploader("Base (CSV ou XLSX)", type=["csv","xlsx"])
-sheet_name = None
-df_raw = None
-
-if file is not None and file.name.lower().endswith(".xlsx"):
-    try:
-        import openpyxl
-        xls = pd.ExcelFile(file, engine="openpyxl")
-        sheet_name = st.sidebar.selectbox("Planilha", options=xls.sheet_names, index=0)
-        df_raw = pd.read_excel(file, engine="openpyxl", sheet_name=sheet_name)
-    except Exception as e:
-        st.sidebar.error("Falhou ao ler XLSX. Verifique o arquivo.")
-        st.stop()
-elif file is not None:
-    df_raw = pd.read_csv(file)
-
-if df_raw is None:
-    st.info("Faça o upload da base para iniciar.")
-    st.stop()
+file = st.sidebar.file_uploader("Base (CSV ou XLSX)", type=["csv", "xlsx"])
 
 st.sidebar.header("Perfil (JSON)")
 profile_upload = st.sidebar.file_uploader("Carregar perfil", type=["json"], key="profile_up")
@@ -136,30 +113,48 @@ if profile_upload is not None:
     except Exception:
         st.sidebar.error("JSON inválido.")
 
+sheet_name = None
+df_raw = None
+
+if file is not None and file.name.lower().endswith(".xlsx"):
+    try:
+        import openpyxl
+        xls = pd.ExcelFile(file, engine="openpyxl")
+        default_sheet = (loaded_profile or {}).get("sheet", "")
+        idx = xls.sheet_names.index(default_sheet) if default_sheet in xls.sheet_names else 0
+        sheet_name = st.sidebar.selectbox("Planilha", options=xls.sheet_names, index=idx)
+        df_raw = pd.read_excel(file, engine="openpyxl", sheet_name=sheet_name)
+    except Exception:
+        st.sidebar.error("Falhou ao ler XLSX. Verifique o arquivo.")
+        st.stop()
+elif file is not None:
+    df_raw = pd.read_csv(file)
+
+if df_raw is None:
+    st.info("Faça o upload da base para iniciar.")
+    st.stop()
+
 # ===================== Wizard de Mapeamento =====================
 st.subheader("Passo 1 — Mapeamento de colunas")
 
 cols_raw = list(df_raw.columns)
 cols_norm = {c: normalize_text(c) for c in cols_raw}
 
-required_fields = ["cliente","classe","termo","servico_acessorio","valor_mensalidade"]
+required_fields = ["cliente", "classe", "termo", "servico_acessorio", "valor_mensalidade"]
 optional_fields = [
-    "inicio_vigencia","fim_vigencia","meses_restantes",
-    "valor_taxa_cancelamento","valor_multa_nao_devolucao","taxa_multa_25pct",
-    "status_do_contrato","instalado",
+    "inicio_vigencia", "fim_vigencia", "meses_restantes",
+    "valor_taxa_cancelamento", "valor_multa_nao_devolucao", "taxa_multa_25pct",
+    "status_do_contrato", "instalado",
 ]
 
-# Sugestões por fuzzy match
 def suggest(field):
     guess = difflib.get_close_matches(field, [normalize_text(c) for c in cols_raw], n=1)
     if guess:
-        # encontra o original correspondente ao normalizado
         for original, norm in cols_norm.items():
             if norm == guess[0]:
                 return original
     return None
 
-# Valores iniciais vindos do perfil (se houver)
 profile_cols = (loaded_profile or {}).get("columns", {})
 
 sel_required = {}
@@ -170,8 +165,8 @@ for i, field in enumerate(required_fields):
         sel_required[field] = st.selectbox(
             f"Coluna para **{field}**",
             options=["(selecione)"] + cols_raw,
-            index=(cols_raw.index(default)+1 if default in cols_raw else 0),
-            key=f"req_{field}"
+            index=(cols_raw.index(default) + 1 if default in cols_raw else 0),
+            key=f"req_{field}",
         )
 
 with st.expander("Mapeamento adicional (opcional)", expanded=False):
@@ -183,12 +178,13 @@ with st.expander("Mapeamento adicional (opcional)", expanded=False):
             sel_optional[field] = st.selectbox(
                 f"{field}",
                 options=["(não usar)"] + cols_raw,
-                index=(cols_raw.index(default)+1 if default in cols_raw else 0),
-                key=f"opt_{field}"
+                index=(cols_raw.index(default) + 1 if default in cols_raw else 0),
+                key=f"opt_{field}",
             )
 
 # ===================== Status do contrato - modos =====================
 st.subheader("Passo 2 — Como obter o **status do contrato**")
+
 status_mode_default = (loaded_profile or {}).get("status_mode", "by_mapping")
 status_mode = st.radio(
     "Escolha o modo:",
@@ -196,83 +192,112 @@ status_mode = st.radio(
     format_func=lambda x: {
         "by_mapping": "A) A partir de uma coluna de status (mapeando os valores)",
         "by_flags":   "B) Derivar de meses_restantes + flag de instalado",
-        "by_dates":   "C) Derivar de fim_vigencia + flag de instalado (usa data de corte)"
+        "by_dates":   "C) Derivar de fim_vigencia + flag de instalado (usa data de corte)",
     }[x],
-    index=["by_mapping","by_flags","by_dates"].index(status_mode_default),
-    key="status_mode"
+    index=["by_mapping", "by_flags", "by_dates"].index(status_mode_default),
+    key="status_mode",
 )
 
 status_config = (loaded_profile or {})
+installed_cfg = (status_config.get("columns", {}) or {}).get("installed_flag", {})
 norm_values_default = {
-    "true": (status_config.get("columns", {}).get("installed_flag", {}) or {}).get("true_values", ["SIM","INSTALADO","TRUE","1"]),
-    "false": (status_config.get("columns", {}).get("installed_flag", {}) or {}).get("false_values", ["NAO","NÃO","FALSE","0"]),
+    "true": installed_cfg.get("true_values", ["SIM", "INSTALADO", "TRUE", "1"]),
+    "false": installed_cfg.get("false_values", ["NAO", "NÃO", "FALSE", "0"]),
 }
+
+# valores padrão para uso no bloco de salvar perfil
+status_col = ""
+map_cvi = map_cvn = map_svi = map_svn = []
+installed_col = ""
+true_vals = ",".join(norm_values_default["true"])
+false_vals = ",".join(norm_values_default["false"])
+data_corte = date.today()
 
 if status_mode == "by_mapping":
     default_col = profile_cols.get("status_column")
-    status_col = st.selectbox("Coluna que contém o status", options=["(selecione)"]+cols_raw,
-                              index=(cols_raw.index(default_col)+1 if default_col in cols_raw else 0))
-    # capturar valores distintos (até 100)
+    status_col = st.selectbox(
+        "Coluna que contém o status",
+        options=["(selecione)"] + cols_raw,
+        index=(cols_raw.index(default_col) + 1 if default_col in cols_raw else 0),
+    )
     vals = df_raw[status_col] if status_col and status_col != "(selecione)" else pd.Series([], dtype=object)
     sample_vals = sorted(pd.Series(vals).astype(str).str.strip().unique().tolist())[:100]
 
     st.caption("Mapeie os valores da coluna de status para as 4 categorias oficiais.")
     c1, c2 = st.columns(2)
     with c1:
-        map_cvi = st.multiselect("Com vigência e instalado", sample_vals,
-                                 default=(status_config.get("status_map", {}).get("Com vigência e instalado",[]) if loaded_profile else []))
-        map_cvn = st.multiselect("Com vigência e não instalado", sample_vals,
-                                 default=(status_config.get("status_map", {}).get("Com vigência e não instalado",[]) if loaded_profile else []))
+        map_cvi = st.multiselect(
+            "Com vigência e instalado",
+            sample_vals,
+            default=(status_config.get("status_map", {}).get("Com vigência e instalado", []) if loaded_profile else []),
+        )
+        map_cvn = st.multiselect(
+            "Com vigência e não instalado",
+            sample_vals,
+            default=(status_config.get("status_map", {}).get("Com vigência e não instalado", []) if loaded_profile else []),
+        )
     with c2:
-        map_svi = st.multiselect("Sem vigência e instalado", sample_vals,
-                                 default=(status_config.get("status_map", {}).get("Sem vigência e instalado",[]) if loaded_profile else []))
-        map_svn = st.multiselect("Sem vigência e não instalado", sample_vals,
-                                 default=(status_config.get("status_map", {}).get("Sem vigência e não instalado",[]) if loaded_profile else []))
+        map_svi = st.multiselect(
+            "Sem vigência e instalado",
+            sample_vals,
+            default=(status_config.get("status_map", {}).get("Sem vigência e instalado", []) if loaded_profile else []),
+        )
+        map_svn = st.multiselect(
+            "Sem vigência e não instalado",
+            sample_vals,
+            default=(status_config.get("status_map", {}).get("Sem vigência e não instalado", []) if loaded_profile else []),
+        )
 
-elif status_mode in ("by_flags","by_dates"):
+elif status_mode in ("by_flags", "by_dates"):
     inst_default = profile_cols.get("installed")
-    installed_col = st.selectbox("Coluna que indica instalado (sim/não)",
-                                 options=["(selecione)"]+cols_raw,
-                                 index=(cols_raw.index(inst_default)+1 if inst_default in cols_raw else 0))
+    installed_col = st.selectbox(
+        "Coluna que indica instalado (sim/não)",
+        options=["(selecione)"] + cols_raw,
+        index=(cols_raw.index(inst_default) + 1 if inst_default in cols_raw else 0),
+    )
     st.caption("Defina quais valores serão interpretados como Verdadeiro (instalado) e Falso.")
     c1, c2 = st.columns(2)
     with c1:
         true_vals = st.text_input(
             "Valores 'verdadeiro' (separados por vírgula)",
-            value=",".join(norm_values_default["true"])
+            value=",".join(norm_values_default["true"]),
         )
     with c2:
         false_vals = st.text_input(
             "Valores 'falso' (separados por vírgula)",
-            value=",".join(norm_values_default["false"])
+            value=",".join(norm_values_default["false"]),
         )
-
     if status_mode == "by_dates":
-        # usa fim_vigencia e data de corte para derivar meses_restantes>0
         cutoff_default = (status_config.get("calculo", {}) or {}).get("data_corte", "today")
         if cutoff_default == "today":
-            cutoff_value = date.today()
+            data_corte = date.today()
         else:
             try:
-                cutoff_value = pd.to_datetime(cutoff_default).date()
+                data_corte = pd.to_datetime(cutoff_default).date()
             except Exception:
-                cutoff_value = date.today()
-        data_corte = st.date_input("Data de corte (para vigência)", value=cutoff_value)
-    else:
-        data_corte = None
+                data_corte = date.today()
 
 # ===================== Passo 3 — Regras e parsing =====================
 st.subheader("Passo 3 — Regras de cálculo e parsing")
 
 percent_default = (loaded_profile or {}).get("calculo", {}).get("percent_multa", 0.25)
-percent_multa = st.number_input("Percentual padrão da multa (25% = 0.25)", min_value=0.0, max_value=1.0, step=0.01, value=float(percent_default))
+percent_multa = st.number_input(
+    "Percentual padrão da multa (25% = 0.25)",
+    min_value=0.0, max_value=1.0, step=0.01, value=float(percent_default),
+)
 
 parsing_default = (loaded_profile or {}).get("parsing", {}) or {}
-decimal_sep = st.selectbox("Separador decimal", options=[",","."], index=(0 if parsing_default.get("decimal", ",")=="," else 1))
-thousand_sep = st.selectbox("Separador de milhar", options=[".",","," ","(nenhum)"],
-                            index={".":0,",":1," ":"2","(nenhum)":3}.get(parsing_default.get("thousands","."),0))
-if thousand_sep == "(nenhum)":
-    thousand_sep = ""
+decimal_sep = st.selectbox("Separador decimal", options=[",", "."],
+                           index=(0 if parsing_default.get("decimal", ",") == "," else 1))
+
+idx_map = {".": 0, ",": 1, " ": 2, "(nenhum)": 3}
+thousand_sep_val = parsing_default.get("thousands", ".")
+thousand_choice = st.selectbox(
+    "Separador de milhar",
+    options=[".", ",", " ", "(nenhum)"],
+    index=idx_map.get(thousand_sep_val, 0),
+)
+thousand_sep = "" if thousand_choice == "(nenhum)" else thousand_choice
 
 st.markdown("---")
 
@@ -281,33 +306,33 @@ def can_proceed_required():
     return all(sel_required[f] and sel_required[f] != "(selecione)" for f in required_fields)
 
 proceed = st.button("Aplicar mapeamento e **gerar dados**", disabled=not can_proceed_required())
-
 if not proceed:
     st.stop()
 
 # 1) Renomeia colunas escolhidas para nomes internos
 df = df_raw.copy()
 columns_map = {sel_required[k]: k for k in required_fields if sel_required[k] != "(selecione)"}
-columns_map.update({sel_optional[k]: k for k in optional_fields if sel_optional.get(k) and sel_optional[k] != "(não usar)"})
+columns_map.update({sel_optional[k]: k for k in optional_fields
+                    if sel_optional.get(k) and sel_optional[k] != "(não usar)"})
 df = df.rename(columns=columns_map)
 
 # 2) Parsing: números e datas
-num_cols = ["valor_mensalidade","valor_taxa_cancelamento","valor_multa_nao_devolucao","taxa_multa_25pct","meses_restantes"]
+num_cols = ["valor_mensalidade", "valor_taxa_cancelamento", "valor_multa_nao_devolucao",
+            "taxa_multa_25pct", "meses_restantes"]
 for c in num_cols:
     if c in df.columns:
         df[c] = to_number(df[c], decimal_sep=decimal_sep, thousand_sep=thousand_sep)
 
-for c in ["inicio_vigencia","fim_vigencia"]:
+for c in ["inicio_vigencia", "fim_vigencia"]:
     if c in df.columns:
         df[c] = df[c].apply(parse_date_any)
 
 # 3) Meses restantes (se não vier)
-hoje = pd.Timestamp(date.today())
 if "meses_restantes" not in df.columns or df["meses_restantes"].isna().any():
     if "fim_vigencia" in df.columns:
-        ref_date = pd.Timestamp(date.today()) if (status_mode != "by_dates" or data_corte is None) else pd.Timestamp(data_corte)
+        ref_date = pd.Timestamp(data_corte) if status_mode == "by_dates" else pd.Timestamp(date.today())
         dias = (df["fim_vigencia"] - ref_date).dt.days.fillna(0).clip(lower=0)
-        df["meses_restantes"] = np.ceil(dias/30.0).astype(int)
+        df["meses_restantes"] = np.ceil(dias / 30.0).astype(int)
     else:
         df["meses_restantes"] = 0
 
@@ -322,10 +347,11 @@ def make_installed_flag(series: pd.Series, true_list, false_list):
     fset = {normalize_text(x).upper() for x in false_list}
     def conv(v):
         vn = normalize_text(v).upper()
-        if vn in tset: return True
-        if vn in fset: return False
-        # fallback: tenta bool de forma simples
-        return vn in {"1","true","sim","install","instalado","installed","yes","y"}
+        if vn in tset:
+            return True
+        if vn in fset:
+            return False
+        return vn in {"1", "TRUE", "SIM", "INSTALADO", "INSTALLED", "YES", "Y"}
     return s.map(conv)
 
 if status_mode == "by_mapping":
@@ -354,16 +380,16 @@ elif status_mode == "by_flags":
         installed_bool = make_installed_flag(df[installed_col], true_list, false_list)
         df["status_do_contrato"] = np.select(
             [
-                (df["meses_restantes"]>0) & installed_bool,
-                (df["meses_restantes"]>0) & (~installed_bool),
-                (df["meses_restantes"]==0) & installed_bool,
+                (df["meses_restantes"] > 0) & installed_bool,
+                (df["meses_restantes"] > 0) & (~installed_bool),
+                (df["meses_restantes"] == 0) & installed_bool,
             ],
             [
                 "Com vigência e instalado",
                 "Com vigência e não instalado",
                 "Sem vigência e instalado",
             ],
-            default="Sem vigência e não instalado"
+            default="Sem vigência e não instalado",
         )
     else:
         st.error("Selecione a coluna de instalado para o modo B.")
@@ -387,14 +413,14 @@ elif status_mode == "by_dates":
                 "Com vigência e não instalado",
                 "Sem vigência e instalado",
             ],
-            default="Sem vigência e não instalado"
+            default="Sem vigência e não instalado",
         )
     else:
         st.error("Para o modo C, informe 'fim_vigencia' e a coluna 'instalado'.")
         st.stop()
 
 # Preenche taxas ausentes como 0
-for c in ["valor_taxa_cancelamento","valor_multa_nao_devolucao"]:
+for c in ["valor_taxa_cancelamento", "valor_multa_nao_devolucao"]:
     if c not in df.columns:
         df[c] = 0.0
     df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
@@ -428,25 +454,25 @@ profile = {
         **{k: v for k, v in {f: sel_required[f] for f in required_fields}.items() if v and v != "(selecione)"},
         **{k: v for k, v in {f: sel_optional[f] for f in optional_fields}.items() if v and v != "(não usar)"},
         "installed_flag": {
-            "source": (installed_col if status_mode in ("by_flags","by_dates") else ""),
-            "true_values": ([x.strip() for x in true_vals.split(",")] if status_mode in ("by_flags","by_dates") else []),
-            "false_values": ([x.strip() for x in false_vals.split(",")] if status_mode in ("by_flags","by_dates") else []),
-        }
+            "source": (installed_col if status_mode in ("by_flags", "by_dates") else ""),
+            "true_values": ([x.strip() for x in true_vals.split(",")] if status_mode in ("by_flags", "by_dates") else []),
+            "false_values": ([x.strip() for x in false_vals.split(",")] if status_mode in ("by_flags", "by_dates") else []),
+        },
     },
     "status_mode": status_mode,
-    "status_column": (status_col if status_mode=="by_mapping" else ""),
-    "status_map": ( {
+    "status_column": (status_col if status_mode == "by_mapping" else ""),
+    "status_map": ({
         "Com vigência e instalado": map_cvi,
         "Com vigência e não instalado": map_cvn,
         "Sem vigência e instalado": map_svi,
         "Sem vigência e não instalado": map_svn,
-    } if status_mode=="by_mapping" else {}),
+    } if status_mode == "by_mapping" else {}),
     "calculo": {
         "percent_multa": float(percent_multa),
         "meses_restantes": "from_fim_vigencia" if "fim_vigencia" in df.columns else "provided",
-        "data_corte": str(date.today()) if status_mode!="by_dates" else str(data_corte),
+        "data_corte": str(date.today()) if status_mode != "by_dates" else str(data_corte),
     },
-    "parsing": {"decimal": decimal_sep, "thousands": thousand_sep or ""}
+    "parsing": {"decimal": decimal_sep, "thousands": thousand_sep or ""},
 }
 st.download_button(
     "Baixar perfil (JSON)",
@@ -469,99 +495,28 @@ c1, c2, c3 = st.columns(3)
 with c1:
     sel_clientes = st.multiselect("Cliente", sorted(df["cliente"].astype(str).unique().tolist()))
 with c2:
-    sel_classes  = st.multiselect("Classe",  sorted(df["classe"].astype(str).unique().tolist()))
+    sel_classes = st.multiselect("Classe", sorted(df["classe"].astype(str).unique().tolist()))
 with c3:
-    sel_termos   = st.multiselect("Termo",    sorted(df["termo"].astype(str).unique().tolist()))
+    sel_termos = st.multiselect("Termo", sorted(df["termo"].astype(str).unique().tolist()))
 
 c4, c5 = st.columns(2)
 with c4:
     sel_servicos = st.multiselect("Serviço/Acessório", sorted(df["servico_acessorio"].astype(str).unique().tolist()))
 with c5:
-    status_opts = ["Com vigência e instalado","Com vigência e não instalado","Sem vigência e instalado","Sem vigência e não instalado"]
+    status_opts = [
+        "Com vigência e instalado",
+        "Com vigência e não instalado",
+        "Sem vigência e instalado",
+        "Sem vigência e não instalado",
+    ]
     sel_status = st.multiselect("Status do contrato", status_opts)
 
 c6, c7 = st.columns(2)
+
 min_cdev, max_cdev = float(df["valor_cobrar_com_devolucao"].min()), float(df["valor_cobrar_com_devolucao"].max())
 min_sdev, max_sdev = float(df["valor_cobrar_sem_devolucao"].min()), float(df["valor_cobrar_sem_devolucao"].max())
 
 with c6:
-    faixa_cdev = st.slider("Faixa de valores (Com Devolução)",
-        min_value=float(np.floor(min_cdev)), max_value=float(np.ceil(max_cdev)),
-        value=(float(np.floor(min_cdev)), float(np.ceil(max_cdev))), step=1.0,
-        help="Filtra pelo campo calculado **valor_cobrar_com_devolucao**.")
-    )
-    st.caption(f"Selecionado: **{brl(faixa_cdev[0])} a {brl(faixa_cdev[1])}** · Limites do arquivo: {brl(min_cdev)} a {brl(max_cdev)}")
+    faixa_cdev = st.slider(
+        label="Faixa de valores (Com Devolução)",
 
-with c7:
-    faixa_sdev = st.slider("Faixa de valores (Sem Devolução)",
-        min_value=float(np.floor(min_sdev)), max_value=float(np.ceil(max_sdev)),
-        value=(float(np.floor(min_sdev)), float(np.ceil(max_sdev))), step=1.0,
-        help="Filtra pelo campo calculado **valor_cobrar_sem_devolucao**.")
-    )
-    st.caption(f"Selecionado: **{brl(faixa_sdev[0])} a {brl(faixa_sdev[1])}** · Limites do arquivo: {brl(min_sdev)} a {brl(max_sdev)}")
-
-# aplica filtros
-f = df.copy()
-if sel_clientes: f = f[f["cliente"].astype(str).isin(sel_clientes)]
-if sel_classes:  f = f[f["classe"].astype(str).isin(sel_classes)]
-if sel_termos:   f = f[f["termo"].astype(str).isin(sel_termos)]
-if sel_servicos: f = f[f["servico_acessorio"].astype(str).isin(sel_servicos)]
-if sel_status:   f = f[f["status_do_contrato"].isin(sel_status)]
-f = f[(f["valor_cobrar_com_devolucao"].between(faixa_cdev[0], faixa_cdev[1])) &
-      (f["valor_cobrar_sem_devolucao"].between(faixa_sdev[0], faixa_sdev[1]))]
-
-st.markdown("---")
-
-# ===================== Métricas =====================
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Valor Total dos Contratos com Devolução", brl(f["valor_cobrar_com_devolucao"].sum()))
-m2.metric("Valor Total dos Contratos sem Devolução", brl(f["valor_cobrar_sem_devolucao"].sum()))
-m3.metric("Quantidade de Contratos", f"{f['termo'].nunique():,}")
-m4.metric("Quantidade de Acessórios", f"{len(f):,}")
-
-# ===================== Tabela =====================
-cols_show = ["classe","termo","servico_acessorio","status_do_contrato",
-             "valor_cobrar_com_devolucao","valor_cobrar_sem_devolucao"]
-presentes = [c for c in cols_show if c in f.columns]
-tbl = f[presentes].sort_values(["classe","termo","servico_acessorio"]).reset_index(drop=True)
-
-st.dataframe(tbl.style.format({
-    "valor_cobrar_com_devolucao": brl,
-    "valor_cobrar_sem_devolucao": brl,
-}), use_container_width=True)
-
-# ===================== Resumo =====================
-st.subheader("Resumo consolidado (opcional)")
-agr_por = st.multiselect("Agrupar por", ["cliente","classe","termo"], default=["cliente"])
-if agr_por:
-    agg = f.groupby(agr_por, dropna=False, as_index=False).agg(
-        contratos=("termo","nunique"),
-        acessorios=("servico_acessorio","count"),
-        total_com_devolucao=("valor_cobrar_com_devolucao","sum"),
-        total_sem_devolucao=("valor_cobrar_sem_devolucao","sum"),
-    )
-    st.dataframe(agg.style.format({
-        "total_com_devolucao": brl,
-        "total_sem_devolucao": brl,
-    }), use_container_width=True)
-else:
-    agg = pd.DataFrame()
-
-# ===================== Exportar =====================
-st.subheader("Exportar resultados")
-csv_bytes = f.to_csv(index=False).encode("utf-8-sig")
-st.download_button("Baixar CSV (detalhado filtrado)", data=csv_bytes,
-                   file_name="resultado_rescisao.csv", mime="text/csv")
-
-try:
-    import xlsxwriter
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        tbl.to_excel(writer, index=False, sheet_name="detalhado")
-        if not agg.empty:
-            agg.to_excel(writer, index=False, sheet_name="resumo")
-    st.download_button("Baixar Excel (detalhado + resumo)", data=output.getvalue(),
-                       file_name="resultado_rescisao.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-except Exception:
-    st.info("Para exportar em Excel, garanta que **XlsxWriter** está instalado.")
