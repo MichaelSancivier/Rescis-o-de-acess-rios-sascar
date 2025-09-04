@@ -511,12 +511,39 @@ with c5:
     ]
     sel_status = st.multiselect("Status do contrato", status_opts)
 
+# ----- Sliders de faixa de valores -----
 c6, c7 = st.columns(2)
 
-min_cdev, max_cdev = float(df["valor_cobrar_com_devolucao"].min()), float(df["valor_cobrar_com_devolucao"].max())
-min_sdev, max_sdev = float(df["valor_cobrar_sem_devolucao"].min()), float(df["valor_cobrar_sem_devolucao"].max())
+min_cdev = float(df["valor_cobrar_com_devolucao"].min())
+max_cdev = float(df["valor_cobrar_com_devolucao"].max())
+min_sdev = float(df["valor_cobrar_sem_devolucao"].min())
+max_sdev = float(df["valor_cobrar_sem_devolucao"].max())
 
 with c6:
     faixa_cdev = st.slider(
-        label="Faixa de valores (Com Devolução)",
+        "Faixa de valores (Com Devolução)",
+        min_value=float(np.floor(min_cdev)),
+        max_value=float(np.ceil(max_cdev)),
+        value=(float(np.floor(min_cdev)), float(np.ceil(max_cdev))),
+        step=1.0,
+        help="Filtra pelo campo calculado **valor_cobrar_com_devolucao**."
+    )
+    st.caption(
+        f"Selecionado: **{brl(faixa_cdev[0])} a {brl(faixa_cdev[1])}** · "
+        f"Limites do arquivo: {brl(min_cdev)} a {brl(max_cdev)}"
+    )
+
+with c7:
+    faixa_sdev = st.slider(
+        "Faixa de valores (Sem Devolução)",
+        min_value=float(np.floor(min_sdev)),
+        max_value=float(np.ceil(max_sdev)),
+        value=(float(np.floor(min_sdev)), float(np.ceil(max_sdev))),
+        step=1.0,
+        help="Filtra pelo campo calculado **valor_cobrar_sem_devolucao**."
+    )
+    st.caption(
+        f"Selecionado: **{brl(faixa_sdev[0])} a {brl(faixa_sdev[1])}** · "
+        f"Limites do arquivo: {brl(min_sdev)} a {brl(max_sdev)}"
+    )
 
